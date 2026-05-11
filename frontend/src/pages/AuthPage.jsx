@@ -4,81 +4,167 @@ function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Side - Branding */}
-      <div className="hidden md:flex md:w-1/2 bg-gradient-to-br from-blue-600 to-blue-800 p-12 flex-col justify-center items-center">
-        <div className="text-center">
-          <div className="w-32 h-32 bg-white/20 backdrop-blur rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl">
-            <span className="text-7xl">✨</span>
-          </div>
-          <h1 className="text-5xl font-bold text-white mb-4">Spandan</h1>
-          <p className="text-blue-200 text-xl">Poll Question Generator</p>
-          <div className="w-20 h-1 bg-yellow-400 mx-auto mt-6 rounded"></div>
-          <p className="text-white/70 mt-6 max-w-md">
-            Transform your classroom with interactive polls and AI-powered question generation
+    <div className="min-h-screen flex items-center justify-center p-4" style={{
+      background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #1e3c72 100%)',
+      fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif'
+    }}>
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '20px',
+        padding: '40px 60px',
+        textAlign: 'center',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+        maxWidth: '450px',
+        width: '100%'
+      }}>
+        {/* Logo */}
+        <div style={{
+          width: '80px',
+          height: '80px',
+          background: 'rgba(255, 255, 255, 0.15)',
+          borderRadius: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 20px',
+          fontSize: '2.5rem'
+        }}>
+          ✨
+        </div>
+
+        {/* Title */}
+        <h1 style={{
+          fontSize: '2.5rem',
+          color: 'white',
+          marginBottom: '10px',
+          textShadow: '2px 2px 4px rgba(0, 0, 0, 0.3)'
+        }}>
+          Spandan
+        </h1>
+
+        {/* Divider */}
+        <div style={{
+          width: '60px',
+          height: '3px',
+          background: '#ffd700',
+          margin: '15px auto',
+          borderRadius: '2px'
+        }}></div>
+
+        {/* Subtitle */}
+        <p style={{
+          fontSize: '1.1rem',
+          color: '#ffd700',
+          marginBottom: '25px'
+        }}>
+          Poll Question Generator
+        </p>
+
+        {/* Form */}
+        <form style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          {!isLogin && (
+            <input
+              type="text"
+              placeholder="Full Name"
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '10px',
+                color: 'white',
+                fontSize: '1rem',
+                outline: 'none',
+                transition: 'border-color 0.3s'
+              }}
+            />
+          )}
+          <input
+            type="email"
+            placeholder="Email Address"
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '10px',
+              color: 'white',
+              fontSize: '1rem',
+              outline: 'none',
+              transition: 'border-color 0.3s'
+            }}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '10px',
+              color: 'white',
+              fontSize: '1rem',
+              outline: 'none',
+              transition: 'border-color 0.3s'
+            }}
+          />
+          <button
+            type="submit"
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: 'rgba(59, 130, 246, 0.8)',
+              border: 'none',
+              borderRadius: '10px',
+              color: 'white',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              marginTop: '5px',
+              transition: 'all 0.3s'
+            }}
+            onMouseOver={(e) => e.target.style.background = 'rgba(59, 130, 246, 1)'}
+            onMouseOut={(e) => e.target.style.background = 'rgba(59, 130, 246, 0.8)'}
+          >
+            {isLogin ? 'Sign In' : 'Sign Up'}
+          </button>
+        </form>
+
+        {/* Toggle */}
+        <div style={{ marginTop: '20px' }}>
+          <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.95rem' }}>
+            {isLogin ? "Don't have an account? " : 'Already have an account? '}
+            <button
+              onClick={() => setIsLogin(!isLogin)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#ffd700',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '0.95rem'
+              }}
+            >
+              {isLogin ? 'Sign Up' : 'Sign In'}
+            </button>
           </p>
         </div>
-      </div>
 
-      {/* Right Side - Auth Form */}
-      <div className="w-full md:w-1/2 flex items-center justify-center p-6 md:p-12">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 shadow-2xl border border-white/20 w-full max-w-md">
-          <div className="md:hidden flex items-center justify-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <span className="text-3xl">✨</span>
-            </div>
-          </div>
-
-          <h2 className="text-3xl font-bold text-white text-center mb-2">
-            {isLogin ? 'Welcome Back' : 'Create Account'}
-          </h2>
-          <p className="text-white/60 text-center mb-8">
-            {isLogin ? 'Sign in to continue' : 'Join Spandan today'}
+        {/* Footer */}
+        <div style={{
+          marginTop: '25px',
+          paddingTop: '15px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.1)'
+        }}>
+          <p style={{
+            color: 'rgba(255, 255, 255, 0.6)',
+            fontSize: '0.85rem'
+          }}>
+            By Rohit Sharma | Built by Spandan_Astra ⭐
           </p>
-
-          <form className="space-y-4">
-            {!isLogin && (
-              <div>
-                <input
-                  type="text"
-                  placeholder="Full Name"
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:border-blue-400 transition-colors"
-                />
-              </div>
-            )}
-            <div>
-              <input
-                type="email"
-                placeholder="Email Address"
-                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:border-blue-400 transition-colors"
-              />
-            </div>
-            <div>
-              <input
-                type="password"
-                placeholder="Password"
-                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:border-blue-400 transition-colors"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl"
-            >
-              {isLogin ? 'Sign In' : 'Sign Up'}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-white/60">
-              {isLogin ? "Don't have an account?" : 'Already have an account?'}
-              <button
-                onClick={() => setIsLogin(!isLogin)}
-                className="text-blue-400 hover:text-blue-300 font-semibold ml-1"
-              >
-                {isLogin ? 'Sign Up' : 'Sign In'}
-              </button>
-            </p>
-          </div>
         </div>
       </div>
     </div>
