@@ -261,7 +261,7 @@ function AuthPage() {
             {/* Footer */}
             <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e5e7eb', textAlign: 'center' }}>
               <p style={{ color: '#9ca3af', fontSize: '13px' }}>
-                By Rohit Sharma | Built by Spandan_Astra ⭐
+                
               </p>
             </div>
           </div>
@@ -526,7 +526,7 @@ function AuthPage() {
         color: '#9ca3af',
         fontSize: '13px'
       }}>
-        By Rohit Sharma | Built by Spandan_Astra ⭐
+        
       </div>
 
       {/* Animations */}

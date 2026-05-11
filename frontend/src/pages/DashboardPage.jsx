@@ -351,7 +351,7 @@ function DashboardPage() {
         fontSize: '14px'
       }}>
         <p style={{ margin: 0 }}>
-          By Rohit Sharma | Built by Spandan_Astra ⭐
+          
         </p>
       </footer>
 
