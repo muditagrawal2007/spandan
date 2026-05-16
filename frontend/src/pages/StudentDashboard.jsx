@@ -39,7 +39,7 @@ function StudentDashboard() {
         setStats({
           totalRooms: data.stats.totalRooms || 0,
           pollsTaken: data.stats.pollsTaken || 0,
-          pollsMissed: 0, // TODO: calculate properly
+          pollsMissed: data.stats.pollsMissed || 0,
           average: data.stats.average || 0
         })
       }

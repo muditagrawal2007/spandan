@@ -164,6 +164,7 @@ router.get('/', async (req, res) => {
 router.get('/stats/student/:studentId', async (req, res) => {
   try {
     const Response = (await import('../models/Response.js')).default
+    const Question = (await import('../models/Question.js')).default
     const Room = (await import('../models/Room.js')).default
     const RoomMember = (await import('../models/RoomMember.js')).default
     
@@ -202,14 +203,19 @@ router.get('/stats/student/:studentId', async (req, res) => {
     const totalPoints = responses.reduce((sum, r) => sum + r.points, 0)
     const average = pollsTaken > 0 ? Math.round((totalPoints / (pollsTaken * 100)) * 100) : 0
 
-    // Count missed polls (questions they didn't answer)
-    // This would need question count per room to calculate properly
+    // Count launched polls: questions with 'approved' status (approved & launched to students)
+    const launchedCount = await Question.countDocuments({
+      roomId: { $in: uniqueRooms },
+      status: 'approved'
+    })
+    const pollsMissed = Math.max(0, launchedCount - pollsTaken)
 
     res.json({
       success: true,
       stats: {
         totalRooms,
         pollsTaken,
+        pollsMissed,
         average
       }
     })
@@ -362,10 +368,10 @@ router.get('/room/:roomId/student/:studentId', async (req, res) => {
       responseMap[qId] = r
     })
 
-    // Get all questions for this room (both approved and manually created)
+    // Get all approved questions for this room (launched to students)
     const questions = await Question.find({ 
       roomId: roomObjectId, 
-      status: { $in: ['approved', 'pending'] }
+      status: 'approved'
     }).sort({ createdAt: -1 }).lean()  // Sort by newest first (latest asked question on top)
 
     console.log(`[responses] Found ${questions.length} questions for room ${roomId}`)
