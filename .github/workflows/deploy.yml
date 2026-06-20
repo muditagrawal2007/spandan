@@ -1,0 +1,65 @@
+name: Deploy to Production
+ 
+on:
+  workflow_dispatch:
+ 
+env:
+  INFISICAL_ENVIRONMENT: prod
+  INFISICAL_SECRET_PATH: /
+ 
+jobs:
+  deploy:
+    name: SSH Deploy
+    runs-on: ubuntu-latest
+ 
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p /.ssh
+          echo "${{ secrets.SPANDAN_DEPLOY_SSH_KEY }}" > /.ssh/id_ed25519
+          chmod 600 /.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SPANDAN_HOST }} >> /.ssh/known_hosts
+ 
+      - name: Deploy
+        run: |
+          ssh spandan-deploy@${{ secrets.SPANDAN_HOST }} bash << DEPLOY
+            set -e
+            cd /var/samagama/spandan-workspace/spandan
+ 
+            echo "==> Pulling latest code..."
+            git pull origin main
+ 
+            echo "==> Authenticating with Infisical..."
+            export INFISICAL_TOKEN=\$(npx @infisical/cli@0.43.40 login \
+              --method=universal-auth \
+              --client-id="${{ secrets.INFISICAL_CLIENT_ID }}" \
+              --client-secret="${{ secrets.INFISICAL_CLIENT_SECRET
+              --silent --plain)
+ 
+            if [ -z "\$INFISICAL_TOKEN" ]; then
+              echo "Infisical authentication failed"
+              exit 1
+            fi
+ 
+            echo "==> Writing frontend .env from Infisical..."
+            INFISICAL_PROJECT_ID="${{ secrets.INFISICAL_PROJECT_ID }}" \
+            npx @infisical/cli@0.43.40 export \
+              --env=${{ env.INFISICAL_ENVIRONMENT }} \
+              --path=${{ env.INFISICAL_SECRET_PATH }} \
+              --format=dotenv | grep "^VITE_" > frontend/.env
+ 
+            echo "==> Installing frontend dependencies..."
+            cd frontend && npm install
+ 
+            echo "==> Building frontend..."
+            npm run build
+            cd ..
+ 
+            echo "==> Restarting spandan service..."
+            sudo systemctl restart spandan.service
+ 
+            echo "==> Reloading nginx..."
+            sudo systemctl reload nginx
+ 
+            echo "==> Deployment complete."
+          DEPLOY
