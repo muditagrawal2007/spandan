@@ -26,17 +26,27 @@ function App() {
 
   // Check for Samagama session on app load
   useEffect(() => {
-    if (isAuthenticated || samagamaChecked) return
+    console.log('[Spandan] App mounted. isAuthenticated:', isAuthenticated, 'samagamaChecked:', samagamaChecked)
+    console.log('[Spandan] window.location.href:', window.location.href)
+
+    if (isAuthenticated || samagamaChecked) {
+      console.log('[Spandan] Skipping Samagama check — already authenticated or already checked')
+      return
+    }
 
     const checkSamagamaSession = async () => {
       try {
         // Read Samagama token from localStorage
         const samagamaToken = localStorage.getItem('samagama_auth_token')
+        console.log('[Spandan] Samagama token found:', !!samagamaToken)
 
         if (!samagamaToken) {
+          console.log('[Spandan] No Samagama token — showing normal auth page')
           setSamagamaChecked(true)
           return
         }
+
+        console.log('[Spandan] Calling Samagama /api/auth/me...')
 
         // Call Samagama's auth/me endpoint with Bearer token
         const response = await fetch('https://samagama.in/api/auth/me', {
@@ -47,18 +57,25 @@ function App() {
           }
         })
 
+        console.log('[Spandan] Samagama API response status:', response.status)
+
         if (!response.ok) {
+          console.log('[Spandan] Samagama API failed — showing normal auth page')
           setSamagamaChecked(true)
           return
         }
 
         const data = await response.json()
         const samagamaUser = data.user
+        console.log('[Spandan] Samagama user data:', samagamaUser)
 
         if (!samagamaUser || !samagamaUser.email) {
+          console.log('[Spandan] No valid Samagama user — showing normal auth page')
           setSamagamaChecked(true)
           return
         }
+
+        console.log('[Spandan] Sending to Spandan backend for auto-login...')
 
         // Send user data to Spandan backend for auto-provisioning
         const spandanResponse = await fetch(`${API_URL}/auth/samagama-auto-login`, {
@@ -72,21 +89,27 @@ function App() {
           })
         })
 
+        console.log('[Spandan] Spandan auto-login response status:', spandanResponse.status)
+
         if (!spandanResponse.ok) {
+          console.log('[Spandan] Spandan backend failed — showing normal auth page')
           setSamagamaChecked(true)
           return
         }
 
         const spandanData = await spandanResponse.json()
+        console.log('[Spandan] Spandan auto-login success:', spandanData.user.role)
 
         // Set auth state
         setAuth(spandanData.user, spandanData.token)
 
         // Redirect to correct dashboard using window.location
         const dashboard = spandanData.user.role === 'teacher' ? '/teacher' : '/student'
-        window.location.href = `${window.location.origin}/spandan${dashboard}`
+        const redirectUrl = `${window.location.origin}/spandan${dashboard}`
+        console.log('[Spandan] Redirecting to:', redirectUrl)
+        window.location.href = redirectUrl
       } catch (error) {
-        console.error('Samagama session check failed:', error)
+        console.error('[Spandan] Samagama session check failed:', error)
       } finally {
         setSamagamaChecked(true)
       }
