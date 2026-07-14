@@ -7,6 +7,9 @@ import { Server } from 'socket.io'
 import jwt from 'jsonwebtoken'
 import dotenv from 'dotenv'
 import mongoose from 'mongoose'
+import { createAdapter } from '@socket.io/redis-adapter'
+import { RedisStore } from 'rate-limit-redis'
+import { initRedis } from './config/redis.js'
 
 // Import routes
 import authRoutes from './routes/auth.js'
@@ -68,19 +71,31 @@ const io = new Server(httpServer, {
   }
 })
 
+// Phase 2A — connect Redis (optional). When enabled, the socket.io adapter makes
+// io.to(room).emit() reach clients on ALL instances, so the app can run behind a load
+// balancer. Top-level await (ESM entry module) so setup below can branch on redis.enabled.
+const redis = await initRedis()
+const INSTANCE_ID = String(process.pid)
+if (redis.enabled) {
+  io.adapter(createAdapter(redis.pubClient, redis.subClient))
+  console.log('[socket.io] Redis adapter attached (instance ' + INSTANCE_ID + ')')
+}
+
 // Make io accessible to routes
 app.set('io', io)
 
-// --- Throttled, server-authoritative live room updates (Phase 1) ---
-// A live question can draw ~1000 answers in seconds. Previously each answer made
-// every client re-fetch the leaderboard (~N^2 DB hits). Instead, the REST submit
-// handler calls schedule(roomId); a burst coalesces into ONE recompute + broadcast
-// per room per interval, and the top-N payload is pushed so students never refetch.
-// (Per-process state — fine for a single instance; move to Redis pub/sub when
-// scaling horizontally, see scalability audit Phase 2.)
+// --- Throttled, server-authoritative live room updates (Phase 1 + 2A multi-instance) ---
+// A live question can draw ~1000 answers in seconds. Instead of every client re-fetching the
+// leaderboard (~N^2 DB hits), the REST submit handler calls schedule(roomId); a burst coalesces
+// into ONE recompute + broadcast per room per interval, pushing a top-N payload.
+//  - Single instance: an in-memory timer + rank Map.
+//  - Multi-instance (Redis): a SET-NX lock so only ONE instance computes+broadcasts per window
+//    (the adapter fans the broadcast out to all instances), and the rank cache lives in a Redis
+//    hash so any instance can answer "rank on submit".
 const LIVE_THROTTLE_MS = Number(process.env.LIVE_UPDATE_THROTTLE_MS) || 1500
 const LEADERBOARD_TOP_N = Number(process.env.LEADERBOARD_TOP_N) || 20
-const roomLive = new Map() // roomId(str) -> { timer, roomCode, rankByStudent: Map, total }
+const RANK_CACHE_TTL_S = Math.max(10, Math.ceil((LIVE_THROTTLE_MS * 5) / 1000))
+const roomLive = new Map() // roomId(str) -> { timer, roomCode, rankByStudent: Map, total } (single-instance)
 
 async function computeAndBroadcast(roomId) {
   try {
@@ -114,17 +129,33 @@ async function computeAndBroadcast(roomId) {
     const counts = {}
     countAgg.forEach(c => { counts[c._id.toString()] = c.count })
 
-    const state = roomLive.get(roomId) || {}
-    state.rankByStudent = rankByStudent
-    state.total = full.length
-    if (!state.roomCode) {
+    // Resolve roomCode (needed to target the socket room).
+    let roomCode = roomLive.get(roomId)?.roomCode
+    if (!roomCode) {
       const room = await Room.findById(roomId).select('code').lean()
-      state.roomCode = room?.code || null
+      roomCode = room?.code || null
     }
-    roomLive.set(roomId, state)
 
-    if (state.roomCode) {
-      io.to(state.roomCode).emit('leaderboard:updated', {
+    // Cache ranks for "rank on submit".
+    if (redis.enabled) {
+      try {
+        const flat = { _total: String(full.length) }
+        rankByStudent.forEach((rank, sid) => { flat[sid] = String(rank) })
+        const key = `live:ranks:${roomId}`
+        await redis.client.del(key)
+        await redis.client.hSet(key, flat)
+        await redis.client.expire(key, RANK_CACHE_TTL_S)
+      } catch (e) { /* non-fatal: rank-on-submit just returns null */ }
+    } else {
+      const state = roomLive.get(roomId) || {}
+      state.rankByStudent = rankByStudent
+      state.total = full.length
+      state.roomCode = roomCode
+      roomLive.set(roomId, state)
+    }
+
+    if (roomCode) {
+      io.to(roomCode).emit('leaderboard:updated', {
         leaderboard: full.slice(0, LEADERBOARD_TOP_N),
         totalParticipants: full.length,
         counts
@@ -135,11 +166,22 @@ async function computeAndBroadcast(roomId) {
   }
 }
 
-function scheduleRoomLiveUpdate(roomId) {
+async function scheduleRoomLiveUpdate(roomId) {
   const id = String(roomId)
+  if (redis.enabled) {
+    // Only one instance schedules a broadcast per throttle window (global coalescing via SET NX).
+    try {
+      const won = await redis.client.set(`live:sched:${id}`, INSTANCE_ID, { NX: true, PX: LIVE_THROTTLE_MS })
+      if (won === 'OK') setTimeout(() => computeAndBroadcast(id), LIVE_THROTTLE_MS)
+    } catch (e) {
+      // Redis hiccup — fall back to a local timer so updates still flow on this instance.
+      setTimeout(() => computeAndBroadcast(id), LIVE_THROTTLE_MS)
+    }
+    return
+  }
   let state = roomLive.get(id)
   if (!state) { state = { timer: null, roomCode: null, rankByStudent: new Map(), total: 0 }; roomLive.set(id, state) }
-  if (state.timer) return // already scheduled; the trailing run will pick up the latest state
+  if (state.timer) return // already scheduled; the trailing run picks up the latest state
   state.timer = setTimeout(() => {
     const s = roomLive.get(id)
     if (s) s.timer = null
@@ -147,9 +189,18 @@ function scheduleRoomLiveUpdate(roomId) {
   }, LIVE_THROTTLE_MS)
 }
 
-// Last-computed rank for a student (for "rank on submit"); may be up to one interval stale.
-function getCachedStudentRank(roomId, studentId) {
-  const state = roomLive.get(String(roomId))
+// Last-computed rank for a student ("rank on submit"); may be up to one interval stale.
+async function getCachedStudentRank(roomId, studentId) {
+  const id = String(roomId)
+  if (redis.enabled) {
+    try {
+      const [rank, total] = await redis.client.hmGet(`live:ranks:${id}`, [String(studentId), '_total'])
+      return { rank: rank != null ? Number(rank) : null, totalParticipants: total != null ? Number(total) : null }
+    } catch (e) {
+      return { rank: null, totalParticipants: null }
+    }
+  }
+  const state = roomLive.get(id)
   if (!state) return { rank: null, totalParticipants: null }
   return { rank: state.rankByStudent?.get(String(studentId)) ?? null, totalParticipants: state.total ?? null }
 }
@@ -159,8 +210,14 @@ app.set('liveUpdates', { schedule: scheduleRoomLiveUpdate, getRank: getCachedStu
 // Trust proxy (for rate limiting behind nginx)
 app.set('trust proxy', 1)
 
-// Rate limiting
+// Rate limiting — shared across instances via Redis when enabled, else per-process memory.
+// A shared store is required for multi-instance so limits are global, not N-times looser.
+const rlStore = (prefix) => redis.enabled
+  ? new RedisStore({ prefix, sendCommand: (...args) => redis.client.sendCommand(args) })
+  : undefined
+
 const apiLimiter = rateLimit({
+  store: rlStore('rl:api:'),
   windowMs: 15 * 60 * 1000, // 15 minutes
   // Note: hundreds of students at a live event usually share ONE public IP (venue/campus NAT),
   // so this per-IP limit is effectively shared across the whole room. Sized for that.
@@ -169,6 +226,7 @@ const apiLimiter = rateLimit({
 })
 
 const authLimiter = rateLimit({
+  store: rlStore('rl:auth:'),
   windowMs: 60 * 60 * 1000, // 1 hour
   // Only count FAILED auth attempts: 700 students behind one NAT share this bucket, so counting
   // successful logins would trip a 429 mid-event (seen at ~250 logins). Failures still throttle brute-force.
@@ -178,12 +236,14 @@ const authLimiter = rateLimit({
 })
 
 const responseLimiter = rateLimit({
+  store: rlStore('rl:resp:'),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5000, // limit each IP to 5000 response submissions per windowMs (high limit for live quizzes)
   message: { error: 'Too many response submissions, please try again later' }
 })
 
 const leaderboardLimiter = rateLimit({
+  store: rlStore('rl:lb:'),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10000, // very high limit for leaderboard reads (refreshes on every points update during live sessions)
   message: { error: 'Too many requests, please try again later' }

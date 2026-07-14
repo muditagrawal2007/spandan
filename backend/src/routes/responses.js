@@ -108,7 +108,7 @@ router.post('/', authorize('student'), async (req, res) => {
     // never poll the leaderboard endpoint during a live session.
     const live = req.app.get('liveUpdates')
     live?.schedule(roomId)
-    const rankInfo = live?.getRank(roomId, studentId) || {}
+    const rankInfo = (live ? await live.getRank(roomId, studentId) : null) || {}
 
     res.status(201).json({
       success: true,
