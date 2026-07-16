@@ -386,7 +386,7 @@ async function generateWithMiniMax(prompt) {
         }
       ],
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 8000
     })
   })
 
@@ -417,7 +417,7 @@ async function generateWithOpenAI(prompt, model = 'gpt-4o-mini') {
         }
       ],
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 8000
     })
   })
 
@@ -447,7 +447,7 @@ async function generateWithAnthropic(prompt, model = 'claude-sonnet-4-20250514')
           content: prompt
         }
       ],
-      max_tokens: 2000,
+      max_tokens: 8000,
       temperature: 0.7
     })
   })
@@ -480,7 +480,7 @@ async function generateWithGoogle(prompt, model = 'gemini-2.0-flash') {
       ],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 2000
+        maxOutputTokens: 8000
       }
     })
   })
