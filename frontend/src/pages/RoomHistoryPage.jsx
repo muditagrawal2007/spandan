@@ -6,12 +6,39 @@ import Sidebar from '../components/Sidebar'
 import ThemeToggle from '../components/ThemeToggle'
 import ProfileDropdown from '../components/ProfileDropdown'
 import useIsMobile from '../hooks/useIsMobile'
+import { API_URL } from '../config.js'
 
 function RoomHistoryPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const { user, token } = useAuthStore()
   const { rooms, isLoading, fetchRooms, setAuthToken } = useRoomStore()
+  const [downloadingId, setDownloadingId] = React.useState(null)
+
+  // Download a room's complete results as a CSV (teacher-only endpoint; needs the auth
+  // header, so we fetch as a Blob and trigger the download rather than using a plain link).
+  const downloadCsv = async (room) => {
+    setDownloadingId(room._id)
+    try {
+      const res = await fetch(`${API_URL}/responses/room/${room._id}/export`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const date = room.endedAt ? new Date(room.endedAt).toISOString().slice(0, 10) : 'session'
+      const safe = (room.name || 'room').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60)
+      a.href = url
+      a.download = `Spandan_${safe}_${date}.csv`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert('Could not download the results CSV. Please try again.')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   useEffect(() => {
     if (token) {
@@ -143,22 +170,44 @@ function RoomHistoryPage() {
                       Ended {room.endedAt ? new Date(room.endedAt).toLocaleDateString() : ''}
                     </p>
                   </div>
-                  <button
-                    onClick={() => navigate(`/${user?.role === 'teacher' ? 'teacher' : 'student'}/room/${room._id}/results`)}
-                    style={{
-                      marginTop: '18px',
-                      padding: '10px 16px',
-                      background: 'var(--accent-gradient)',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 'var(--radius)',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    View Results →
-                  </button>
+                  <div style={{ marginTop: '18px', display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={() => navigate(`/${user?.role === 'teacher' ? 'teacher' : 'student'}/room/${room._id}/results`)}
+                      style={{
+                        flex: 1,
+                        padding: '10px 16px',
+                        background: 'var(--accent-gradient)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 'var(--radius)',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      View Results →
+                    </button>
+                    {user?.role === 'teacher' && (
+                      <button
+                        onClick={() => downloadCsv(room)}
+                        disabled={downloadingId === room._id}
+                        title="Download complete results as CSV"
+                        style={{
+                          padding: '10px 14px',
+                          background: 'transparent',
+                          color: 'var(--accent)',
+                          border: '1.5px solid var(--accent)',
+                          borderRadius: 'var(--radius)',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          cursor: downloadingId === room._id ? 'wait' : 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {downloadingId === room._id ? '…' : '⬇ CSV'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
