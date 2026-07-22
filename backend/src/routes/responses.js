@@ -2,6 +2,7 @@ import express from 'express'
 import { authenticate, authorize } from '../middleware/auth.js'
 import { isBatchEnabled, bufferResponse } from '../services/responseBuffer.js'
 import * as resultsSnapshot from '../services/resultsSnapshot.js'
+import { debug } from '../utils/debug.js'
 const router = express.Router()
 
 // Apply authentication to all routes
@@ -477,7 +478,7 @@ router.get('/room/:roomId/student/:studentId', async (req, res) => {
     }).lean()
     
     // Debug log
-    console.log(`[responses] Fetched ${responses.length} responses for student ${studentId} in room ${roomId}`)
+    debug(`[responses] Fetched ${responses.length} responses for student ${studentId} in room ${roomId}`)
     
     // Create a map of questionId -> response for quick lookup
     // Use a helper to safely convert any ID to string
@@ -492,7 +493,7 @@ router.get('/room/:roomId/student/:studentId', async (req, res) => {
     const responseMap = {}
     responses.forEach(r => {
       const qId = toIdString(r.questionId)
-      console.log(`[responses] Response for questionId: ${qId}, selectedOption: ${r.selectedOption}, isCorrect: ${r.isCorrect}`)
+      debug(`[responses] Response for questionId: ${qId}, selectedOption: ${r.selectedOption}, isCorrect: ${r.isCorrect}`)
       responseMap[qId] = r
     })
 
@@ -502,7 +503,7 @@ router.get('/room/:roomId/student/:studentId', async (req, res) => {
       status: 'approved'
     }).sort({ createdAt: -1 }).lean()  // Sort by newest first (latest asked question on top)
 
-    console.log(`[responses] Found ${questions.length} questions for room ${roomId}`)
+    debug(`[responses] Found ${questions.length} questions for room ${roomId}`)
 
     // Merge questions with response data
     const questionsWithResponses = questions.map(q => {
@@ -510,7 +511,7 @@ router.get('/room/:roomId/student/:studentId', async (req, res) => {
       const studentResponse = responseMap[qIdStr]
       
       if (studentResponse) {
-        console.log(`[responses] Matched question ${qIdStr} with response, selectedOption: ${studentResponse.selectedOption}`)
+        debug(`[responses] Matched question ${qIdStr} with response, selectedOption: ${studentResponse.selectedOption}`)
       }
       
       return {
