@@ -49,6 +49,43 @@ async function getQuestionCached(Question, questionId) {
   }
   return q
 }
+
+// The GET /responses/room/:id/student/:id read path fetches the room's FULL approved-question list.
+// That list is student-INDEPENDENT (identical for everyone in the room), yet every student hits the
+// endpoint when their poll timer expires — at classroom scale that is hundreds of identical
+// Question.find + serializations per poll transition. Cache the list per room so the herd collapses
+// to ~one query per TTL per instance. The per-student response merge in the handler stays fresh (it
+// comes from a separate Response.find); the cached array is only ever read, never mutated. Staleness
+// is bounded by the TTL and benign: a question is approved at launch (~a poll-length before its poll
+// ends), so it is always in the cache by the time students read; the live question arrives via the
+// new_question socket, not this endpoint.
+const ROOM_QUESTIONS_TTL_MS = Number(process.env.ROOM_QUESTIONS_CACHE_TTL_MS) || 10000
+const roomQuestionsCache = new Map()    // roomId(str) -> { questions, expiresAt(ms) }
+const roomQuestionsInflight = new Map() // roomId(str) -> Promise<questions>  (single-flight)
+
+async function getRoomQuestionsCached(Question, roomObjectId) {
+  const key = String(roomObjectId)
+  const hit = roomQuestionsCache.get(key)
+  if (hit && hit.expiresAt > Date.now()) return hit.questions
+  // Single-flight: if a query for this room is already running, share it instead of firing another.
+  // This matters most at a congested transition where the whole room misses at once and the first
+  // query is slow — without this, everyone who arrives before it returns would each hit Mongo.
+  const inflight = roomQuestionsInflight.get(key)
+  if (inflight) return inflight
+  const p = (async () => {
+    try {
+      const questions = await Question.find({ roomId: roomObjectId, status: 'approved' })
+        .sort({ createdAt: -1 }).lean()
+      if (roomQuestionsCache.size > 50000) roomQuestionsCache.clear()
+      roomQuestionsCache.set(key, { questions, expiresAt: Date.now() + ROOM_QUESTIONS_TTL_MS })
+      return questions
+    } finally {
+      roomQuestionsInflight.delete(key)
+    }
+  })()
+  roomQuestionsInflight.set(key, p)
+  return p
+}
 // ----------------------------------------------------------------------------------------------
 
 // POST /api/responses - Save a student's answer
@@ -497,11 +534,10 @@ router.get('/room/:roomId/student/:studentId', async (req, res) => {
       responseMap[qId] = r
     })
 
-    // Get all approved questions for this room (launched to students)
-    const questions = await Question.find({ 
-      roomId: roomObjectId, 
-      status: 'approved'
-    }).sort({ createdAt: -1 }).lean()  // Sort by newest first (latest asked question on top)
+    // Get all approved questions for this room (launched to students). Cached per-room (short TTL)
+    // because this list is identical for every student and the whole room hits this endpoint at once
+    // when a poll ends — see getRoomQuestionsCached. Sorted newest-first (latest asked on top).
+    const questions = await getRoomQuestionsCached(Question, roomObjectId)
 
     debug(`[responses] Found ${questions.length} questions for room ${roomId}`)
 
