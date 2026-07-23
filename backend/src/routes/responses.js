@@ -187,7 +187,6 @@ router.post('/', authorize('student'), async (req, res) => {
             existingResponse: existingResponse ? {
               selectedOption: existingResponse.selectedOption,
               selectedOptions: existingResponse.selectedOptions,
-              isCorrect: existingResponse.isCorrect,
               points: existingResponse.points
             } : undefined
           })
